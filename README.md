@@ -10,7 +10,7 @@ A compact AutoHotkey script for keyboard power-users, combining a layout switche
 
 ### 1. Layout Switcher
 
-Tired of `Alt+Shift`? Switch between your primary and secondary keyboard layouts (e.g., English and German) by simply tapping a single key of your choice (like `LCtrl` or `CapsLock`).
+Tired of `Alt+Shift`? This script allows you to quickly toggle between your primary keyboard layout (e.g., English) and the last-used secondary layout (e.g., German, Ukrainian) by simply tapping a single key of your choice (like `LCtrl` or `CapsLock`). You can still access other installed keyboard layouts through standard Windows methods (e.g., `Win+Space`, `Alt+Shift`, mouse selection).
 
 - **Fast & Reliable**: Uses an event-driven `InputHook` for minimal system load and high reliability.
 - **Per-Window Switching**: Intelligently switches the layout for the active window only, preserving your layout settings in other applications.
