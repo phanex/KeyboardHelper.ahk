@@ -25,20 +25,23 @@ Strips all formatting (fonts, colors, links) from your clipboard content. Just c
 
 ### 3. Input Diary
 
-> **ВАЖНОЕ ПРЕДУПРЕЖДЕНИЕ О БЕЗОПАСНОСТИ**
->
-> Функция "Дневник ввода" записывает **ВСЕ** нажатия клавиш, включая пароли и другие конфиденциальные данные.
->
-> Перед вводом паролей или другой важной информации, вы должны:
-> - **Отключить функцию:** Установить `global ENABLE_INPUT_DIARY := false` в файле конфигурации.
-> - **Приостановить скрипт:** Щелкнуть правой кнопкой мыши по значку AutoHotkey в системном трее и выбрать "Pause Script".
-> - **Закрыть скрипт:** Выйти из скрипта через тот же значок в трее.
-
 A safety net for your typing. This feature logs all keyboard input to a text file, ensuring you can recover text from a closed note, a browser crash, or an unexpected system shutdown.
 
 - **Automatic & Lightweight**: Captures keystrokes in the background and saves them periodically.
 - **Simple Recovery**: On startup, the previous session's log is saved to `diary.last.txt`, so your most recent work is always backed up.
-- **Privacy-Aware**: The diary only logs printable characters and ignores hotkey combinations.
+
+### ⚠️ Privacy Notice
+
+The Input Diary is designed to log only printable characters and ignores most hotkey combinations.
+
+> **‼️ ВАЖНОЕ ПРЕДУПРЕЖДЕНИЕ О БЕЗОПАСНОСТИ ‼️**
+>
+> Функция "Дневник ввода" записывает **ВСЕ** вводимые символы, включая **пароли** и другую конфиденциальную информацию.
+>
+> Перед вводом таких данных, вы обязаны:
+> - **Отключить функцию:** Установить `global ENABLE_INPUT_DIARY := false` в конфигурации скрипта.
+> - **Приостановить скрипт:** Через иконку в системном трее (правый клик -> "Pause Script").
+> - **Полностью закрыть скрипт:** Через ту же иконку.
 
 ## Installation
 
