@@ -66,7 +66,7 @@ global ENABLE_INPUT_DIARY := true     ; Set to false to disable the Input Diary
 ; --- Layout Switcher ---
 global LAYOUT_PRI := "en-US"          ; Primary layout (e.g., English)
 global LAYOUT_SEC := "de-DE"          ; Secondary layout (e.g., German)
-global LAYOUT_SWITCH_KEY := "LCtrl"   ; Key to tap for layout switching. LCtrl, RCtrl, CapsLock supported.
+global LAYOUT_SWITCH_KEY := "LCtrl"   ; Key to tap for layout switching. Supported: LCtrl, RCtrl, LShift, RShift, CapsLock, LAlt, RAlt, AppsKey, etc.
 
 ; --- Plain Text Paste ---
 global PLAIN_PASTE_KEY := "#v"        ; Hotkey for plain text paste (Win+V)
