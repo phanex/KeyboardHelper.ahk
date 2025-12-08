@@ -38,7 +38,7 @@ The Input Diary is designed to log only printable characters and ignores most ho
 >
 > The Input Diary feature records **ALL** keystrokes, including **passwords** and other sensitive information.
 >
-> Before entering such data, you must:
+> To prevent logging sensitive information, you must **either** disable the feature, pause the script, **or** exit it entirely before entering such data:
 > - **Disable the feature:** Set `global ENABLE_INPUT_DIARY := false` in the script's configuration.
 > - **Pause the script:** Right-click the AutoHotkey icon in the system tray and select "Pause Script".
 > - **Exit the script:** Close the script entirely via the same tray icon.
