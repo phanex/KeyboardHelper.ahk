@@ -1,6 +1,9 @@
 #Requires AutoHotkey v2.0
-; UNIVERSAL AHK SCRIPT v2.1
-; Layout switcher + Plain text paste + Input diary
+; AHK Productivity Pack v1.0.0
+; Combines three essential AutoHotkey productivity tools:
+; - Keyboard Layout Switcher
+; - Plain Text Paste
+; - Input Diary (text recovery)
 
 ; ============================================================================
 ; CONFIGURATION

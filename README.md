@@ -1,4 +1,4 @@
-# Universal AHK Script v2.1
+# AHK Productivity Pack v1.0.0
 
 A single AutoHotkey v2.0 script that combines three powerful productivity tools for Windows 10/11.
 
