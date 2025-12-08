@@ -34,14 +34,14 @@ A safety net for your typing. This feature logs all keyboard input to a text fil
 
 The Input Diary is designed to log only printable characters and ignores most hotkey combinations.
 
-> **‼️ ВАЖНОЕ ПРЕДУПРЕЖДЕНИЕ О БЕЗОПАСНОСТИ ‼️**
+> **‼️ IMPORTANT SECURITY WARNING ‼️**
 >
-> Функция "Дневник ввода" записывает **ВСЕ** вводимые символы, включая **пароли** и другую конфиденциальную информацию.
+> The Input Diary feature records **ALL** keystrokes, including **passwords** and other sensitive information.
 >
-> Перед вводом таких данных, вы обязаны:
-> - **Отключить функцию:** Установить `global ENABLE_INPUT_DIARY := false` в конфигурации скрипта.
-> - **Приостановить скрипт:** Через иконку в системном трее (правый клик -> "Pause Script").
-> - **Полностью закрыть скрипт:** Через ту же иконку.
+> Before entering such data, you must:
+> - **Disable the feature:** Set `global ENABLE_INPUT_DIARY := false` in the script's configuration.
+> - **Pause the script:** Right-click the AutoHotkey icon in the system tray and select "Pause Script".
+> - **Exit the script:** Close the script entirely via the same tray icon.
 
 ## Installation
 
