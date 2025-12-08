@@ -1,6 +1,6 @@
 #Requires AutoHotkey v2.0
-; AHK Productivity Pack v1.0.0
-; Combines three essential AutoHotkey productivity tools:
+; Keyboard Helper v1.0.0
+; A compact AutoHotkey script for keyboard power-users, combining:
 ; - Keyboard Layout Switcher
 ; - Plain Text Paste
 ; - Input Diary (text recovery)

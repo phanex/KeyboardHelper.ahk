@@ -1,6 +1,6 @@
-# AHK Productivity Pack v1.0.0
+# AHK Keyboard Helper
 
-A single AutoHotkey v2.0 script that combines three powerful productivity tools for Windows 10/11.
+A compact AutoHotkey script for keyboard power-users, combining a layout switcher, text diary, and plain-text pasting.
 
 - **Layout Switcher**: Toggle between two keyboard layouts using a single key.
 - **Plain Text Paste**: Paste clipboard content without any formatting.
@@ -46,14 +46,14 @@ The Input Diary is designed to log only printable characters and ignores most ho
 ## Installation
 
 1.  **Install AutoHotkey**: Download and install [AutoHotkey v2.0](https://www.autohotkey.com/).
-2.  **Download the Script**: Place the `AutoHotkey.ahk` file in a folder of your choice.
-3.  **Run the Script**: Double-click the `AutoHotkey.ahk` file to run it. An icon will appear in your system tray.
+2.  **Download the Script**: Place the `KeyboardHelper.ahk` file in a folder of your choice.
+3.  **Run the Script**: Double-click the `KeyboardHelper.ahk` file to run it. An icon will appear in your system tray.
 
-To have the script run automatically on startup, place a shortcut to it in your Windows Startup folder (`Shell:startup`).
+For convenience or to have the script run automatically on Windows startup, you can place a shortcut to it in your Startup folder (`Shell:startup`). For some AutoHotkey setups, renaming the script to `AutoHotkey.ahk` and placing it in your Documents folder may also enable auto-run.
 
 ## Configuration
 
-All settings can be changed by editing the constants at the top of the `AutoHotkey.ahk` script file.
+All settings can be changed by editing the constants at the top of the `KeyboardHelper.ahk` script file.
 
 ```ahk
 ; === CONFIGURATION ===
