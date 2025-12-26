@@ -54,3 +54,35 @@ This is a brief log of the steps taken to initialize the repository:
 - Updated `README.md` multiple times to improve clarity, add security warnings, and synchronize it with the script's actual functionality.
 - Reset the version to 1.0.0 for its first public release.
 - Cleaned up the Git history into a single initial commit.
+
+---
+
+## Bug Fixes and Discoveries
+
+### Solved: Layout Detection in Console Windows (e.g., PowerShell)
+
+- **The Bug:** The layout switcher failed to correctly identify the active keyboard layout in console applications. It would always report the system's default layout (e.g., `en-US`), causing the switcher logic to fail.
+
+- **The Investigation:** A long and arduous debugging process revealed that no standard method of *querying* the layout state works reliably for console windows. The following attempts failed:
+    1.  **`GetKeyboardLayout(threadID)`:** Using the thread ID of the active console window via `GetWindowThreadProcessId` or `GetForegroundWindow` always returned the default layout.
+    2.  **`GetKeyboardLayout(0)`:** Using the script's own thread ID was also unreliable.
+    3.  **`WorkerW` Fallback:** An attempt to query the desktop's thread (`WorkerW`) failed due to AHK v1/v2 syntax conversion errors during implementation.
+    4.  **WinRT API:** A test using the modern `Windows.Globalization.Language.CurrentInputMethodLanguageTag` also failed, proving that even modern APIs do not reliably report the state when queried from an external process.
+
+- **The Breakthrough:** The user's persistence was key. They discovered a forum thread that suggested a different approach: targeting the **Input Method Manager (IME)**.
+
+- **The Solution:** The final, working solution does not query the console window directly. Instead, it uses a function from `Imm32.dll` to find the specific "Input Method Editor" window that is associated with the active application. The thread of *this* IME window correctly holds the true, current keyboard layout state.
+
+- **Final Implementation:** The `GetCurrentLayout()` function in the main `KeyboardHelper.ahk` was replaced with the new `Imm32.dll`-based logic. This solution is self-contained, requires no external libraries, and is compatible with the stable AutoHotkey v2.0 release.
+    
+This method works reliably across all applications tested, including PowerShell, finally resolving the bug.
+
+### Solved: Timeout Regression and Auto-Repeat Handling
+
+- **The Bug:** After implementing the `Imm32.dll` layout detection fix, the original `LAYOUT_TIMEOUT` mechanism (which prevented switching on long key presses) ceased to function correctly. The layout would switch even when the hotkey was held down. This was due to blocking WinAPI calls within the new `GetCurrentLayout()` function, which prevented the timer from invalidating the `SWITCH_TAP` flag on time. Initial attempts to fix this (`A_TickCount`-based logic) inadvertently broke the handling of modifier key combinations (like `Ctrl+C`).
+
+- **The Solution (User-Provided):** The user themselves provided a robust and elegant fix that correctly handles both long presses and auto-repeat keydown events, making the timeout mechanism reliable and resilient to blocking calls. The solution involves:
+    1.  A new global variable `SWITCH_DOWN_TIME` to store the exact time of the *initial* key press (recorded only once per press in `SwitchKeyDown`, ignoring auto-repeat events).
+    2.  In `SwitchKeyUp`, performing a dual check: first, the `SWITCH_TAP` flag (to abort if an interrupted combo like `Ctrl+C` occurred via `CheckModifiers`), and second, comparing `A_TickCount - SWITCH_DOWN_TIME` against `LAYOUT_TIMEOUT` to detect a long press.
+    
+This combined logic ensures that the layout only switches on a quick, clean tap, completely resolving the timeout regression and auto-repeat issues.

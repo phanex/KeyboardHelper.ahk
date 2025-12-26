@@ -78,40 +78,65 @@ OnExit ExitFunc
 ; FUNCTION 1: LAYOUT SWITCHER
 ; ============================================================================
 
+global SWITCH_DOWN_TIME := 0
+
 SwitchKeyDown(*) {
-    global SWITCH_TAP, LAYOUT_TIMEOUT
-    SWITCH_TAP := true
-    SetTimer () => SWITCH_TAP := false, -LAYOUT_TIMEOUT
+    global SWITCH_TAP, SWITCH_DOWN_TIME
+    
+    ; Запам'ятати час тільки при ПЕРШОМУ натисканні
+    if (!SWITCH_TAP) {
+        SWITCH_TAP := true
+        SWITCH_DOWN_TIME := A_TickCount
+    }
 }
 
 SwitchKeyUp(*) {
-    global SWITCH_TAP, last_layout_sec, LAYOUT_PRI, LAYOUT_SWITCH_KEY
+    global SWITCH_TAP, SWITCH_DOWN_TIME, LAYOUT_TIMEOUT
+    global last_layout_sec, LAYOUT_PRI, LAYOUT_SWITCH_KEY
 
     if (!SWITCH_TAP)
         return
+    
+    ; Перевірити, чи пройшло більше ніж LAYOUT_TIMEOUT мс
+    elapsed := A_TickCount - SWITCH_DOWN_TIME
+    if (elapsed > LAYOUT_TIMEOUT) {
+        SWITCH_TAP := false
+        return
+    }
+    
     SWITCH_TAP := false
-
+    
     cur := GetCurrentLayout()
-
+    
     if (IsPrimaryLayout(cur)) {
         SetKeyboardLayout(last_layout_sec)
     } else {
         last_layout_sec := cur
         SetKeyboardLayout(LAYOUT_PRI)
     }
-
-    ; For CapsLock as switch key: undo CapsLock toggle when layout was switched.
+    
     if (LAYOUT_SWITCH_KEY = "CapsLock") {
         SetCapsLockState "Toggle"
     }
 }
-
 GetCurrentLayout() {
-    ; Get current LCID for active window and convert to locale name like "en-US".
-    t := DllCall("GetWindowThreadProcessId", "Ptr", WinExist("A"), "Ptr", 0, "UInt")
-    l := DllCall("GetKeyboardLayout", "UInt", t, "Ptr") & 0xFFFF
+    ; Get the active window's handle
+    hWnd := WinExist("A")
+    
+    ; Use Imm32.dll to get the handle of the Input Method Editor (IME) window associated with the active window.
+    ; This is the key to reliably getting the layout in console windows.
+    ime_hwnd := DllCall("Imm32\ImmGetDefaultIMEWnd", "Ptr", hWnd, "Ptr")
+    
+    ; Get the thread ID of that IME window.
+    ime_threadId := DllCall("GetWindowThreadProcessId", "Ptr", ime_hwnd, "UInt*", 0)
+    
+    ; Get the keyboard layout (HKL) for that specific IME thread.
+    hkl := DllCall("GetKeyboardLayout", "UInt", ime_threadId, "Ptr")
+
+    ; Convert the LCID part of the HKL to a locale name string (e.g., "en-US").
+    lcid := hkl & 0xFFFF
     buf := Buffer(85*2, 0)
-    DllCall("LCIDToLocaleName", "UInt", l, "Ptr", buf, "Int", 85, "UInt", 0)
+    DllCall("LCIDToLocaleName", "UInt", lcid, "Ptr", buf, "Int", 85, "UInt", 0)
     return StrGet(buf)
 }
 

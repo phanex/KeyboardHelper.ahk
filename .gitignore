@@ -2,3 +2,7 @@
 diary.txt
 diary.last.txt
 *.bak
+
+# Project documentation files
+claude.md
+gemini.md
