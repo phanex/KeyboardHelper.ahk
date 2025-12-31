@@ -80,31 +80,44 @@ OnExit ExitFunc
 #DllLoad "Imm32"
 
 global getDefIMEWnd := DllCall("GetProcAddress", "Ptr", DllCall("GetModuleHandle", "Str", "Imm32", "Ptr"), "AStr", "ImmGetDefaultIMEWnd", "Ptr")
-global changeInputLang := 0x50 ; WM_INPUTLANGCHANGEREQUEST
-global hkl_pri := DllCall("LoadKeyboardLayout", "Str", LAYOUT_PRI, "Int", 1, "Ptr")
-global hkl_sec := DllCall("LoadKeyboardLayout", "Str", LAYOUT_SEC, "Int", 1, "Ptr")
+
+global SWITCH_DOWN_TIME := 0
 
 SwitchKeyDown(*) {
-    global SWITCH_TAP, LAYOUT_TIMEOUT
-    SWITCH_TAP := true
-    SetTimer () => SWITCH_TAP := false, -LAYOUT_TIMEOUT
+    global SWITCH_TAP, SWITCH_DOWN_TIME
+    
+    ; Запам'ятати час тільки при ПЕРШОМУ натисканні
+    if (!SWITCH_TAP) {
+        SWITCH_TAP := true
+        SWITCH_DOWN_TIME := A_TickCount
+    }
 }
 
 SwitchKeyUp(*) {
-    global SWITCH_TAP, LAYOUT_SWITCH_KEY, hkl_pri, hkl_sec
+    global SWITCH_TAP, SWITCH_DOWN_TIME, LAYOUT_TIMEOUT
+    global last_layout_sec, LAYOUT_PRI, LAYOUT_SWITCH_KEY
 
     if (!SWITCH_TAP)
         return
-    SWITCH_TAP := false
-
-    cur_hkl := GetCurrentLayout()
-
-    if (cur_hkl = hkl_pri) {
-        SetKeyboardLayout(hkl_sec)
-    } else {
-        SetKeyboardLayout(hkl_pri)
+    
+    ; Перевірити, чи пройшло більше ніж LAYOUT_TIMEOUT мс
+    elapsed := A_TickCount - SWITCH_DOWN_TIME
+    if (elapsed > LAYOUT_TIMEOUT) {
+        SWITCH_TAP := false
+        return
     }
-
+    
+    SWITCH_TAP := false
+    
+    cur := GetCurrentLayout()
+    
+    if (IsPrimaryLayout(cur)) {
+        SetKeyboardLayout(last_layout_sec)
+    } else {
+        last_layout_sec := cur
+        SetKeyboardLayout(LAYOUT_PRI)
+    }
+    
     if (LAYOUT_SWITCH_KEY = "CapsLock") {
         SetCapsLockState "Toggle"
     }
@@ -125,20 +138,33 @@ GetCurrentLayout() {
         }
     }
     threadID := DllCall("GetWindowThreadProcessId", "Ptr", fgWin, "Ptr", 0)
-    return DllCall("GetKeyboardLayout", "UInt", threadID, "Ptr")
+    hkl := DllCall("GetKeyboardLayout", "UInt", threadID, "Ptr")
+
+    ; Convert HKL to locale name string
+    lcid := hkl & 0xFFFF
+    buf := Buffer(85*2, 0)
+    DllCall("LCIDToLocaleName", "UInt", lcid, "Ptr", buf, "Int", 85, "UInt", 0)
+    return StrGet(buf)
 }
 
-SetKeyboardLayout(hkl) {
-    targetWin := "A"
-    if WinActive("ahk_class #32770") {
-        targetWin := ControlGetFocus("A")
+IsPrimaryLayout(locale) {
+    global LAYOUT_PRI
+    return (locale = LAYOUT_PRI)
+}
+
+SetKeyboardLayout(locale) {
+    ; Switch layout via LCID and WM_INPUTLANGCHANGEREQUEST.
+    LCID := DllCall("LocaleNameToLCID", "Str", locale, "UInt", 0, "UInt")
+    w := WinExist("A")
+    if !w
+        return
+
+    PostMessage 0x50, 0, LCID, , "ahk_id " w
+
+    try {
+        c := ControlGetHwnd(ControlGetFocus())
+        PostMessage 0x50, 0, LCID, , "ahk_id " c
     }
-    PostMessage changeInputLang, 0, hkl, , targetWin
-}
-
-IsPrimaryLayout(hkl) {
-    global hkl_pri
-    return (hkl = hkl_pri)
 }
 
 
