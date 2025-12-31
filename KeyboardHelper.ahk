@@ -77,171 +77,68 @@ OnExit ExitFunc
 ; ============================================================================
 ; FUNCTION 1: LAYOUT SWITCHER
 ; ============================================================================
+#DllLoad "Imm32"
 
-global SWITCH_DOWN_TIME := 0
+global getDefIMEWnd := DllCall("GetProcAddress", "Ptr", DllCall("GetModuleHandle", "Str", "Imm32", "Ptr"), "AStr", "ImmGetDefaultIMEWnd", "Ptr")
+global changeInputLang := 0x50 ; WM_INPUTLANGCHANGEREQUEST
+global hkl_pri := DllCall("LoadKeyboardLayout", "Str", LAYOUT_PRI, "Int", 1, "Ptr")
+global hkl_sec := DllCall("LoadKeyboardLayout", "Str", LAYOUT_SEC, "Int", 1, "Ptr")
 
 SwitchKeyDown(*) {
-    global SWITCH_TAP, SWITCH_DOWN_TIME
-    
-    ; Запам'ятати час тільки при ПЕРШОМУ натисканні
-    if (!SWITCH_TAP) {
-        SWITCH_TAP := true
-        SWITCH_DOWN_TIME := A_TickCount
-    }
-}
-
-_GetKeyboardLayout(HWnd) {
-  ThreadId := DllCall("GetWindowThreadProcessId", "Ptr", HWnd, "Ptr", 0)
-  If !ThreadId
-    Return ""
-
-  hkl := DllCall("GetKeyboardLayout", "UInt", ThreadId)
-  lcid := hkl & 0xFFFF
-  buf := Buffer(85*2, 0)
-  DllCall("LCIDToLocaleName", "UInt", lcid, "Ptr", buf, "Int", 85, "UInt", 0)
-  Return StrGet(buf)
-}
-
-_SetKeyboardLayout(HWnd, Layout) {
-  LCID := DllCall("LocaleNameToLCID", "Str", Layout, "UInt", 0, "UInt")
-  PostMessage 0x50, 0, LCID, , "ahk_id " HWnd
-}
-
-GetImeLayout() {
-  WinGetClass wc, "A"
-  If InStr(wc, "ConsoleWindowClass")
-  {
-    ime_hwnd := DllCall("Imm32\ImmGetDefaultIMEWnd", "Ptr", WinExist("A"), "Ptr")
-    If ime_hwnd
-      Return _GetKeyboardLayout(ime_hwnd)
-  }
-  Return ""
-}
-
-GetUwpLayout(Control) {
-  If DllCall("GetClassName", "Ptr", Control, "Str", ClassName, "Int", 256)
-  {
-    If (ClassName ~= "Windows.UI.Core.CoreWindow|App[0-9A-Za-z]+")
-    {
-      Loop 50
-      {
-        PostMessage 0x50, 0, 0, , "ahk_id " Control ; WM_INPUTLANGCHANGEREQUEST
-        Sleep 50
-        If (layout := _GetKeyboardLayout(Control))
-          Return layout
-      }
-    }
-  }
-  Return ""
-}
-
-SetImeLayout(Layout) {
-  WinGetClass wc, "A"
-  If InStr(wc, "ConsoleWindowClass")
-  {
-    ime_hwnd := DllCall("Imm32\ImmGetDefaultIMEWnd", "Ptr", WinExist("A"), "Ptr")
-    If ime_hwnd
-      _SetKeyboardLayout(ime_hwnd, Layout)
-  }
-}
-
-SetUwpLayout(Control, Layout) {
-  If DllCall("GetClassName", "Ptr", Control, "Str", ClassName, "Int", 256)
-  {
-    If (ClassName ~= "Windows.UI.Core.CoreWindow|App[0-9A-Za-z]+")
-    {
-      Loop 50
-      {
-        _SetKeyboardLayout(Control, Layout)
-        Sleep 50
-        If (_GetKeyboardLayout(Control) = Layout)
-          Return
-      }
-    }
-  }
-}
-
-GetCurrentLayout() {
-  WinGetClass wc, "A"
-  If (wc ~= "Windows.UI.Core.CoreWindow|ApplicationFrameWindow|CabinetWClass|ExploreWClass|WorkerW|Shell_TrayWnd")
-  {
-    If (Control := ControlGetFocus()) && (Control ~= "(DirectUIHWND|Windows.UI.Core.CoreWindow|App[0-9A-Za-z]+)")
-    {
-      WinGetPID PID, "A"
-      For Process in ComObjGet("winmgmts:").ExecQuery("Select * from Win32_Process where ProcessId = " PID)
-      {
-        If InStr(Process.ExecutablePath, "\SystemApps\") || InStr(Process.ExecutablePath, "\Microsoft.Windows.Search_")
-          Return GetUwpLayout(Control)
-      }
-    }
-  }
-
-  If InStr(wc, "ConsoleWindowClass")
-    Return GetImeLayout()
-
-  Return _GetKeyboardLayout(WinExist("A"))
-}
-
-LayoutSwitch(Layout) {
-  WinGetClass wc, "A"
-  If (wc ~= "Windows.UI.Core.CoreWindow|ApplicationFrameWindow|CabinetWClass|ExploreWClass|WorkerW|Shell_TrayWnd")
-  {
-    If (Control := ControlGetFocus()) && (Control ~= "(DirectUIHWND|Windows.UI.Core.CoreWindow|App[0-9A-Za-z]+)")
-    {
-      WinGetPID PID, "A"
-      For Process in ComObjGet("winmgmts:").ExecQuery("Select * from Win32_Process where ProcessId = " PID)
-      {
-        If InStr(Process.ExecutablePath, "\SystemApps\") || InStr(Process.ExecutablePath, "\Microsoft.Windows.Search_")
-        {
-          SetUwpLayout(Control, Layout)
-          Return
-        }
-      }
-    }
-  }
-
-  If InStr(wc, "ConsoleWindowClass")
-  {
-    SetImeLayout(Layout)
-    Return
-  }
-
-  _SetKeyboardLayout(WinExist("A"), Layout)
+    global SWITCH_TAP, LAYOUT_TIMEOUT
+    SWITCH_TAP := true
+    SetTimer () => SWITCH_TAP := false, -LAYOUT_TIMEOUT
 }
 
 SwitchKeyUp(*) {
-    global SWITCH_TAP, SWITCH_DOWN_TIME, LAYOUT_TIMEOUT
-    global last_layout_sec, LAYOUT_PRI, LAYOUT_SWITCH_KEY
+    global SWITCH_TAP, LAYOUT_SWITCH_KEY, hkl_pri, hkl_sec
 
     if (!SWITCH_TAP)
         return
-    
-    ; Перевірити, чи пройшло більше ніж LAYOUT_TIMEOUT мс
-    elapsed := A_TickCount - SWITCH_DOWN_TIME
-    if (elapsed > LAYOUT_TIMEOUT) {
-        SWITCH_TAP := false
-        return
-    }
-    
     SWITCH_TAP := false
-    
-    cur := GetCurrentLayout()
-    
-    if (IsPrimaryLayout(cur)) {
-        LayoutSwitch(last_layout_sec)
+
+    cur_hkl := GetCurrentLayout()
+
+    if (cur_hkl = hkl_pri) {
+        SetKeyboardLayout(hkl_sec)
     } else {
-        last_layout_sec := cur
-        LayoutSwitch(LAYOUT_PRI)
+        SetKeyboardLayout(hkl_pri)
     }
-    
+
     if (LAYOUT_SWITCH_KEY = "CapsLock") {
         SetCapsLockState "Toggle"
     }
 }
 
-IsPrimaryLayout(locale) {
-    global LAYOUT_PRI
-    return (locale = LAYOUT_PRI)
+GetCurrentLayout() {
+    fgWin := DllCall("GetForegroundWindow")
+    if WinActive("ahk_class ConsoleWindowClass") {
+        IMEWnd := DllCall(getDefIMEWnd, "Ptr", fgWin)
+        if (IMEWnd != 0) {
+            fgWin := IMEWnd
+        }
+    } else if WinActive("ahk_class vguiPopupWindow") or WinActive("ahk_class ApplicationFrameWindow") {
+        Focused := ControlGetFocus("A")
+        if (Focused != 0) {
+            CtrlID := ControlGetHwnd(Focused, "A")
+            fgWin := CtrlID
+        }
+    }
+    threadID := DllCall("GetWindowThreadProcessId", "Ptr", fgWin, "Ptr", 0)
+    return DllCall("GetKeyboardLayout", "UInt", threadID, "Ptr")
+}
+
+SetKeyboardLayout(hkl) {
+    targetWin := "A"
+    if WinActive("ahk_class #32770") {
+        targetWin := ControlGetFocus("A")
+    }
+    PostMessage changeInputLang, 0, hkl, , targetWin
+}
+
+IsPrimaryLayout(hkl) {
+    global hkl_pri
+    return (hkl = hkl_pri)
 }
 
 
