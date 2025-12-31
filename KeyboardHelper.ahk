@@ -90,6 +90,125 @@ SwitchKeyDown(*) {
     }
 }
 
+_GetKeyboardLayout(HWnd) {
+  ThreadId := DllCall("GetWindowThreadProcessId", "Ptr", HWnd, "Ptr", 0)
+  If !ThreadId
+    Return ""
+
+  hkl := DllCall("GetKeyboardLayout", "UInt", ThreadId)
+  lcid := hkl & 0xFFFF
+  buf := Buffer(85*2, 0)
+  DllCall("LCIDToLocaleName", "UInt", lcid, "Ptr", buf, "Int", 85, "UInt", 0)
+  Return StrGet(buf)
+}
+
+_SetKeyboardLayout(HWnd, Layout) {
+  LCID := DllCall("LocaleNameToLCID", "Str", Layout, "UInt", 0, "UInt")
+  PostMessage 0x50, 0, LCID, , "ahk_id " HWnd
+}
+
+GetImeLayout() {
+  WinGetClass wc, "A"
+  If InStr(wc, "ConsoleWindowClass")
+  {
+    ime_hwnd := DllCall("Imm32\ImmGetDefaultIMEWnd", "Ptr", WinExist("A"), "Ptr")
+    If ime_hwnd
+      Return _GetKeyboardLayout(ime_hwnd)
+  }
+  Return ""
+}
+
+GetUwpLayout(Control) {
+  If DllCall("GetClassName", "Ptr", Control, "Str", ClassName, "Int", 256)
+  {
+    If (ClassName ~= "Windows.UI.Core.CoreWindow|App[0-9A-Za-z]+")
+    {
+      Loop 50
+      {
+        PostMessage 0x50, 0, 0, , "ahk_id " Control ; WM_INPUTLANGCHANGEREQUEST
+        Sleep 50
+        If (layout := _GetKeyboardLayout(Control))
+          Return layout
+      }
+    }
+  }
+  Return ""
+}
+
+SetImeLayout(Layout) {
+  WinGetClass wc, "A"
+  If InStr(wc, "ConsoleWindowClass")
+  {
+    ime_hwnd := DllCall("Imm32\ImmGetDefaultIMEWnd", "Ptr", WinExist("A"), "Ptr")
+    If ime_hwnd
+      _SetKeyboardLayout(ime_hwnd, Layout)
+  }
+}
+
+SetUwpLayout(Control, Layout) {
+  If DllCall("GetClassName", "Ptr", Control, "Str", ClassName, "Int", 256)
+  {
+    If (ClassName ~= "Windows.UI.Core.CoreWindow|App[0-9A-Za-z]+")
+    {
+      Loop 50
+      {
+        _SetKeyboardLayout(Control, Layout)
+        Sleep 50
+        If (_GetKeyboardLayout(Control) = Layout)
+          Return
+      }
+    }
+  }
+}
+
+GetCurrentLayout() {
+  WinGetClass wc, "A"
+  If (wc ~= "Windows.UI.Core.CoreWindow|ApplicationFrameWindow|CabinetWClass|ExploreWClass|WorkerW|Shell_TrayWnd")
+  {
+    If (Control := ControlGetFocus()) && (Control ~= "(DirectUIHWND|Windows.UI.Core.CoreWindow|App[0-9A-Za-z]+)")
+    {
+      WinGetPID PID, "A"
+      For Process in ComObjGet("winmgmts:").ExecQuery("Select * from Win32_Process where ProcessId = " PID)
+      {
+        If InStr(Process.ExecutablePath, "\SystemApps\") || InStr(Process.ExecutablePath, "\Microsoft.Windows.Search_")
+          Return GetUwpLayout(Control)
+      }
+    }
+  }
+
+  If InStr(wc, "ConsoleWindowClass")
+    Return GetImeLayout()
+
+  Return _GetKeyboardLayout(WinExist("A"))
+}
+
+LayoutSwitch(Layout) {
+  WinGetClass wc, "A"
+  If (wc ~= "Windows.UI.Core.CoreWindow|ApplicationFrameWindow|CabinetWClass|ExploreWClass|WorkerW|Shell_TrayWnd")
+  {
+    If (Control := ControlGetFocus()) && (Control ~= "(DirectUIHWND|Windows.UI.Core.CoreWindow|App[0-9A-Za-z]+)")
+    {
+      WinGetPID PID, "A"
+      For Process in ComObjGet("winmgmts:").ExecQuery("Select * from Win32_Process where ProcessId = " PID)
+      {
+        If InStr(Process.ExecutablePath, "\SystemApps\") || InStr(Process.ExecutablePath, "\Microsoft.Windows.Search_")
+        {
+          SetUwpLayout(Control, Layout)
+          Return
+        }
+      }
+    }
+  }
+
+  If InStr(wc, "ConsoleWindowClass")
+  {
+    SetImeLayout(Layout)
+    Return
+  }
+
+  _SetKeyboardLayout(WinExist("A"), Layout)
+}
+
 SwitchKeyUp(*) {
     global SWITCH_TAP, SWITCH_DOWN_TIME, LAYOUT_TIMEOUT
     global last_layout_sec, LAYOUT_PRI, LAYOUT_SWITCH_KEY
@@ -109,55 +228,20 @@ SwitchKeyUp(*) {
     cur := GetCurrentLayout()
     
     if (IsPrimaryLayout(cur)) {
-        SetKeyboardLayout(last_layout_sec)
+        LayoutSwitch(last_layout_sec)
     } else {
         last_layout_sec := cur
-        SetKeyboardLayout(LAYOUT_PRI)
+        LayoutSwitch(LAYOUT_PRI)
     }
     
     if (LAYOUT_SWITCH_KEY = "CapsLock") {
         SetCapsLockState "Toggle"
     }
 }
-GetCurrentLayout() {
-    ; Get the active window's handle
-    hWnd := WinExist("A")
-    
-    ; Use Imm32.dll to get the handle of the Input Method Editor (IME) window associated with the active window.
-    ; This is the key to reliably getting the layout in console windows.
-    ime_hwnd := DllCall("Imm32\ImmGetDefaultIMEWnd", "Ptr", hWnd, "Ptr")
-    
-    ; Get the thread ID of that IME window.
-    ime_threadId := DllCall("GetWindowThreadProcessId", "Ptr", ime_hwnd, "UInt*", 0)
-    
-    ; Get the keyboard layout (HKL) for that specific IME thread.
-    hkl := DllCall("GetKeyboardLayout", "UInt", ime_threadId, "Ptr")
-
-    ; Convert the LCID part of the HKL to a locale name string (e.g., "en-US").
-    lcid := hkl & 0xFFFF
-    buf := Buffer(85*2, 0)
-    DllCall("LCIDToLocaleName", "UInt", lcid, "Ptr", buf, "Int", 85, "UInt", 0)
-    return StrGet(buf)
-}
 
 IsPrimaryLayout(locale) {
     global LAYOUT_PRI
     return (locale = LAYOUT_PRI)
-}
-
-SetKeyboardLayout(locale) {
-    ; Switch layout via LCID and WM_INPUTLANGCHANGEREQUEST.
-    LCID := DllCall("LocaleNameToLCID", "Str", locale, "UInt", 0, "UInt")
-    w := WinExist("A")
-    if !w
-        return
-
-    PostMessage 0x50, 0, LCID, , "ahk_id " w
-
-    try {
-        c := ControlGetHwnd(ControlGetFocus())
-        PostMessage 0x50, 0, LCID, , "ahk_id " c
-    }
 }
 
 

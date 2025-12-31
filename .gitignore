@@ -6,3 +6,8 @@ diary.last.txt
 # Project documentation files
 claude.md
 gemini.md
+
+# Untracked AHK files
+AutoHotkey.ahk
+AutoHotkey.exe
+KeyboardHelper_debug.ahk
