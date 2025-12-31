@@ -33,6 +33,29 @@ This file serves as a log of development notes, known issues, and future ideas f
 **Idea:** Detect password input fields (possibly via accessibility APIs) and automatically pause logging.
 **Challenge:** This is complex, requires window introspection, and may not work reliably in all applications. A simpler alternative would be a dedicated "pause/resume logging" hotkey, but that could introduce hotkey conflicts.
 
+### Milestone: Dual-Shortcut Switching Logic (Proposed)
+**Goal:** Implement a more advanced layout management system using two distinct shortcuts, providing more control than the current cyclic toggle.
+
+**New Logic Explained:**
+
+1.  **Shortcut 1: "Reset to Primary & Remember"** (e.g., `LShift`)
+    *   **Action:** When you press this key, the script checks your current keyboard layout.
+    *   **Behavior:**
+        *   If you are already using the primary layout (e.g., `en-US`), nothing happens.
+        *   If you are using any other layout (e.g., a third language like `de-DE`), the script will **remember** that layout and immediately switch you back to your **primary** layout.
+    *   **Purpose:** This acts as a reliable "home" button to get back to your main typing language, while intelligently saving your last-used secondary language.
+
+2.  **Shortcut 2: "Switch to Secondary"** (e.g., `LCtrl`)
+    *   **Action:** When you press this key, the script switches you to the secondary layout.
+    *   **Behavior:**
+        *   If Shortcut 1 was used recently to remember a layout (like `de-DE`), this shortcut will switch you to that **remembered** layout.
+        *   If you haven't used Shortcut 1 yet, it will switch you to your **pre-defined** secondary layout (the one set as `LAYOUT_SEC` in the configuration).
+    *   **Purpose:** This gives you a dedicated key to activate your secondary/last-used language.
+
+3.  **Special Case: Single Shortcut**
+    *   If you configure both shortcuts to use the **same key**, the script will revert to its current behavior: a simple two-way toggle that cycles between your primary and pre-defined secondary layouts.
+
+
 ---
 
 ## Questions for Future Maintainers
@@ -86,3 +109,13 @@ This method works reliably across all applications tested, including PowerShell,
     2.  In `SwitchKeyUp`, performing a dual check: first, the `SWITCH_TAP` flag (to abort if an interrupted combo like `Ctrl+C` occurred via `CheckModifiers`), and second, comparing `A_TickCount - SWITCH_DOWN_TIME` against `LAYOUT_TIMEOUT` to detect a long press.
     
 This combined logic ensures that the layout only switches on a quick, clean tap, completely resolving the timeout regression and auto-repeat issues.
+
+### Solved: Merging Good Detection with Good Switching (Session 2)
+
+- **The Bug:** After several attempts to implement a robust layout switcher for Console and UWP apps, the script was left in a state where layout *detection* was excellent, but the layout *switching* was broken. The user had a separate `AutoHotkey.ahk` file where the switching logic was perfect, but the detection was flawed for modern apps.
+
+- **The Investigation:** The core of the problem was an incompatibility between the two "good" pieces of code. The user's preferred switching logic operated on **locale name strings** (e.g., "en-US"), while the new, robust detection logic returned a **keyboard layout handle (HKL)** (e.g., a number like `0x4090409`). A direct merge was not possible.
+
+- **The Solution:** The resolution was to act as a bridge between the two systems. The advanced `GetCurrentLayout` function (which correctly identifies the layout in Console/UWP/Steam apps) was modified. After getting the correct HKL, it was programmed to convert that HKL back into a standard locale name string before returning its value.
+
+- **Final Implementation:** The main `KeyboardHelper.ahk` script was built using the user's preferred `AutoHotkey.ahk` as a base. Its simple `GetCurrentLayout` function was then replaced with the new, advanced, and compatible version. This resulted in a final script that has both the user's desired switching behavior and the wide-ranging detection capabilities required for modern Windows applications.
