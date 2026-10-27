@@ -1,92 +1,58 @@
 #Requires AutoHotkey v2.0
-; Keyboard Helper v1.0.0
-; A compact AutoHotkey script for keyboard power-users, combining:
-; - Keyboard Layout Switcher
-; - Plain Text Paste
-; - Input Diary (text recovery)
+#DllLoad "Imm32"
 
 ; ============================================================================
-; CONFIGURATION
+; Keyboard Helper v2.0.0
+; A lightweight AutoHotkey script combining:
+; - macOS-style Layout Switcher (toggles between last two active layouts)
+; - CapsLock Reset & Long-press (tap = switch to en-US, hold = CapsLock toggle)
+; - Plain Text Paste (Win+V)
+; - Screen Color Picker (Win+Alt+C)
 ; ============================================================================
 
-; --- Layout switcher ---
-global ENABLE_LAYOUT_SWITCHER := true
+; --- Configuration ---
+global LAYOUT_PRI := "en-US"         ; Primary layout (reset target for CapsLock)
+global LAYOUT_SWITCH_KEY := "LCtrl"  ; Quick tap switch key
+global LAYOUT_TIMEOUT := 400         ; Max tap duration in ms for switch key
+global CAPSLOCK_HOLD_TIME := 350     ; Min duration in ms to trigger native CapsLock
 
-; Primary / secondary layouts (locale names).
-; Examples: "en-US", "en-GB", "uk-UA", "de-DE", "pl-PL"  (see: dism /online /get-intl)
-global LAYOUT_PRI := "en-US"   ; primary layout
-global LAYOUT_SEC := "uk-UA"   ; secondary layout
-
-; Switch key: LCtrl, RCtrl, LShift, RShift, CapsLock, LAlt, RAlt, AppsKey ...
-global LAYOUT_SWITCH_KEY := "LCtrl"
-
-; Tap timeout (ms) for switch key
-global LAYOUT_TIMEOUT := 500
-
-
-; --- Plain text paste ---
 global ENABLE_PLAIN_PASTE := true
-global PLAIN_PASTE_KEY := "#v"   ; Win+V
+global PLAIN_PASTE_KEY := "#v"       ; Win+V
 
+global ENABLE_COLOR_PICKER := true
+global COLOR_PICKER_KEY := "#!c"     ; Win+Alt+C
 
-; --- Input diary ---
-global ENABLE_INPUT_DIARY := true
-; Diary file path: use A_ScriptDir, A_MyDocuments or absolute path like "D:\Logs\diary.txt"
-global DIARY_FILE := A_ScriptDir "\diary.txt"
-global DIARY_BACKUP := A_ScriptDir "\diary.last.txt"
-global DIARY_AUTO_SAVE_INTERVAL := 10    ; seconds
-global DIARY_CLEAR_ON_START := true
-
-
-; ============================================================================
-; GLOBAL STATE
-; ============================================================================
-
-; Layout switcher
-global last_layout_sec := LAYOUT_SEC
+; --- Global State ---
+global current_layout := ""
+global previous_layout := ""
 global SWITCH_TAP := false
+global SWITCH_DOWN_TIME := 0
+global getDefIMEWnd := DllCall("GetProcAddress", "Ptr", DllCall("GetModuleHandle", "Str", "Imm32", "Ptr"), "AStr", "ImmGetDefaultIMEWnd", "Ptr")
 
-; Input diary
-global diaryBuffer := ""
-global lastAutoSaveLength := 0
-
-
-; ============================================================================
-; INITIALIZATION
-; ============================================================================
-
+; --- Initialization ---
 SetWorkingDir A_ScriptDir
 Persistent
+SetCapsLockState "AlwaysOff"  ; Prevent accidental CapsLock toggle on short tap
 
-if (ENABLE_LAYOUT_SWITCHER) {
-    Hotkey "~*" LAYOUT_SWITCH_KEY, SwitchKeyDown
-    Hotkey "~*" LAYOUT_SWITCH_KEY " up", SwitchKeyUp
-}
+current_layout := GetCurrentLayout()
+previous_layout := (current_layout = LAYOUT_PRI) ? "uk-UA" : LAYOUT_PRI
+
+Hotkey "~*" LAYOUT_SWITCH_KEY, SwitchKeyDown
+Hotkey "~*" LAYOUT_SWITCH_KEY " up", SwitchKeyUp
 
 if (ENABLE_PLAIN_PASTE) {
     Hotkey PLAIN_PASTE_KEY, PlainPaste
 }
 
-if (ENABLE_INPUT_DIARY) {
-    InitDiary()
+if (ENABLE_COLOR_PICKER) {
+    Hotkey COLOR_PICKER_KEY, PickColor
 }
 
-OnExit ExitFunc
-
-
 ; ============================================================================
-; FUNCTION 1: LAYOUT SWITCHER
+; 1. LAYOUT SWITCHER (macOS-style: Toggles between last two used layouts)
 ; ============================================================================
-#DllLoad "Imm32"
-
-global getDefIMEWnd := DllCall("GetProcAddress", "Ptr", DllCall("GetModuleHandle", "Str", "Imm32", "Ptr"), "AStr", "ImmGetDefaultIMEWnd", "Ptr")
-
-global SWITCH_DOWN_TIME := 0
-
 SwitchKeyDown(*) {
     global SWITCH_TAP, SWITCH_DOWN_TIME
-    
-    ; Запам'ятати час тільки при ПЕРШОМУ натисканні
     if (!SWITCH_TAP) {
         SWITCH_TAP := true
         SWITCH_DOWN_TIME := A_TickCount
@@ -95,31 +61,54 @@ SwitchKeyDown(*) {
 
 SwitchKeyUp(*) {
     global SWITCH_TAP, SWITCH_DOWN_TIME, LAYOUT_TIMEOUT
-    global last_layout_sec, LAYOUT_PRI, LAYOUT_SWITCH_KEY
+    global current_layout, previous_layout
 
     if (!SWITCH_TAP)
         return
-    
-    ; Перевірити, чи пройшло більше ніж LAYOUT_TIMEOUT мс
+
     elapsed := A_TickCount - SWITCH_DOWN_TIME
-    if (elapsed > LAYOUT_TIMEOUT) {
-        SWITCH_TAP := false
-        return
-    }
-    
     SWITCH_TAP := false
-    
-    cur := GetCurrentLayout()
-    
-    if (IsPrimaryLayout(cur)) {
-        SetKeyboardLayout(last_layout_sec)
+
+    if (elapsed > LAYOUT_TIMEOUT)
+        return
+
+    UpdateLayouts()
+    target := (previous_layout != "" && previous_layout != current_layout) ? previous_layout : LAYOUT_PRI
+    SetKeyboardLayout(target)
+}
+
+; ============================================================================
+; 2. CAPSLOCK: TAP = RESET TO EN-US, HOLD (>350ms) = REAL CAPSLOCK
+; ============================================================================
+*CapsLock::
+{
+    start := A_TickCount
+    KeyWait "CapsLock"
+    held := A_TickCount - start
+
+    ; If any other key was pressed while holding CapsLock, do nothing
+    if (A_PriorKey != "CapsLock")
+        return
+
+    if (held >= CAPSLOCK_HOLD_TIME) {
+        ; Long press: toggle native uppercase CapsLock state
+        SetCapsLockState !GetKeyState("CapsLock", "T")
     } else {
-        last_layout_sec := cur
+        ; Short tap: immediately reset layout to English
+        UpdateLayouts()
         SetKeyboardLayout(LAYOUT_PRI)
     }
-    
-    if (LAYOUT_SWITCH_KEY = "CapsLock") {
-        SetCapsLockState "Toggle"
+}
+
+; ============================================================================
+; HELPER FUNCTIONS FOR LAYOUTS
+; ============================================================================
+UpdateLayouts() {
+    global current_layout, previous_layout
+    cur := GetCurrentLayout()
+    if (cur != "" && cur != current_layout) {
+        previous_layout := current_layout
+        current_layout := cur
     }
 }
 
@@ -127,9 +116,8 @@ GetCurrentLayout() {
     fgWin := DllCall("GetForegroundWindow")
     if WinActive("ahk_class ConsoleWindowClass") {
         IMEWnd := DllCall(getDefIMEWnd, "Ptr", fgWin)
-        if (IMEWnd != 0) {
+        if (IMEWnd != 0)
             fgWin := IMEWnd
-        }
     } else if WinActive("ahk_class vguiPopupWindow") or WinActive("ahk_class ApplicationFrameWindow") {
         Focused := ControlGetFocus("A")
         if (Focused != 0) {
@@ -140,141 +128,56 @@ GetCurrentLayout() {
     threadID := DllCall("GetWindowThreadProcessId", "Ptr", fgWin, "Ptr", 0)
     hkl := DllCall("GetKeyboardLayout", "UInt", threadID, "Ptr")
 
-    ; Convert HKL to locale name string
     lcid := hkl & 0xFFFF
-    buf := Buffer(85*2, 0)
+    buf := Buffer(85 * 2, 0)
     DllCall("LCIDToLocaleName", "UInt", lcid, "Ptr", buf, "Int", 85, "UInt", 0)
     return StrGet(buf)
 }
 
-IsPrimaryLayout(locale) {
-    global LAYOUT_PRI
-    return (locale = LAYOUT_PRI)
-}
-
 SetKeyboardLayout(locale) {
-    ; Switch layout via LCID and WM_INPUTLANGCHANGEREQUEST.
+    global current_layout, previous_layout
     LCID := DllCall("LocaleNameToLCID", "Str", locale, "UInt", 0, "UInt")
     w := WinExist("A")
     if !w
         return
 
     PostMessage 0x50, 0, LCID, , "ahk_id " w
-
     try {
         c := ControlGetHwnd(ControlGetFocus())
         PostMessage 0x50, 0, LCID, , "ahk_id " c
     }
+
+    if (locale != current_layout) {
+        previous_layout := current_layout
+        current_layout := locale
+    }
 }
 
-
 ; ============================================================================
-; FUNCTION 2: PLAIN TEXT PASTE (Win+V)
+; 3. PLAIN TEXT PASTE (WIN+V)
 ; ============================================================================
-
 PlainPaste(*) {
     clipSaved := ClipboardAll()
     A_Clipboard := Trim(A_Clipboard, " `t`n`r`f`v")
 
     if !ClipWait(0.5) {
         A_Clipboard := clipSaved
-        clipSaved := ""
         return
     }
 
     Send "^v"
     Sleep 50
-
     A_Clipboard := clipSaved
-    clipSaved := ""
 }
-
 
 ; ============================================================================
-; FUNCTION 3: INPUT DIARY
+; 4. SCREEN COLOR PICKER (WIN+ALT+C)
 ; ============================================================================
-
-InitDiary() {
-    global diaryBuffer, lastAutoSaveLength
-    global DIARY_FILE, DIARY_BACKUP, DIARY_CLEAR_ON_START, DIARY_AUTO_SAVE_INTERVAL
-
-    if (DIARY_CLEAR_ON_START) {
-        if FileExist(DIARY_FILE) {
-            try FileDelete DIARY_BACKUP
-            try FileMove DIARY_FILE, DIARY_BACKUP, 1
-        }
-    }
-
-    diaryBuffer := ""
-    lastAutoSaveLength := 0
-
-    ih := InputHook("V I")
-    ih.VisibleText := true
-    ih.VisibleNonText := true
-    ih.KeyOpt("{All}", "N")
-    ih.OnChar := RecordChar
-    ih.OnKeyDown := CheckModifiers
-    ih.Start()
-
-    if (DIARY_AUTO_SAVE_INTERVAL > 0) {
-        SetTimer AutoSaveDiary, DIARY_AUTO_SAVE_INTERVAL * 1000
-    }
-}
-
-CheckModifiers(ih, vk, sc) {
-    global diaryBuffer, SWITCH_TAP, LAYOUT_SWITCH_KEY
-
-    ; Cancel layout tap if any other key pressed while switch key is active.
-    if (SWITCH_TAP) {
-        static vkSwitch := 0
-        if (!vkSwitch) {
-            vkSwitch := GetKeyVK(LAYOUT_SWITCH_KEY)
-        }
-        if (vk != vkSwitch) {
-            SWITCH_TAP := false
-        }
-    }
-
-    ; Do not log text while modifier keys are held.
-    if GetKeyState("Ctrl") || GetKeyState("Alt") || GetKeyState("LWin") || GetKeyState("RWin") {
-        return
-    }
-
-    ; Log Enter as newline.
-    if (vk == 0x0D) {
-        diaryBuffer .= "`n"
-    }
-}
-
-RecordChar(ih, char) {
-    global diaryBuffer
-
-    if (Ord(char) < 32)
-        return
-
-    diaryBuffer .= char
-}
-
-AutoSaveDiary() {
-    global diaryBuffer, lastAutoSaveLength, DIARY_FILE
-
-    currentLength := StrLen(diaryBuffer)
-    if (currentLength > lastAutoSaveLength) {
-        newContent := SubStr(diaryBuffer, lastAutoSaveLength + 1)
-        try FileAppend newContent, DIARY_FILE, "UTF-8"
-        lastAutoSaveLength := currentLength
-    }
-}
-
-
-; ============================================================================
-; CLEANUP
-; ============================================================================
-
-ExitFunc(ExitReason, ExitCode) {
-    global ENABLE_INPUT_DIARY, diaryBuffer, DIARY_FILE
-
-    if (ENABLE_INPUT_DIARY && diaryBuffer != "") {
-        try FileAppend diaryBuffer, DIARY_FILE, "UTF-8"
-    }
+PickColor(*) {
+    MouseGetPos &x, &y
+    color := PixelGetColor(x, y, "RGB")
+    hex := SubStr(color, 3)  ; Strip "0x" prefix, keeping RRGGBB
+    A_Clipboard := hex
+    ToolTip "Copied: #" hex
+    SetTimer () => ToolTip(), -1000
 }
